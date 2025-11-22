@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vocab Master</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <style>
+        :root { --primary: #4f46e5; --bg-body: #f3f4f6; --card-bg: #ffffff; --text-main: #1f2937; }
+        body { background-color: var(--bg-body); font-family: 'Inter', sans-serif; color: var(--text-main); }
+        .card-box { background: var(--card-bg); border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 2rem; margin-bottom: 2rem; }
+        .stat-card { background: white; border-radius: 16px; padding: 1.5rem; text-align: center; border: 1px solid #e5e7eb; }
+        .stat-num { font-size: 2rem; font-weight: 700; color: var(--primary); }
+        .form-control, .form-select { border-radius: 12px; padding: 0.75rem 1rem; background-color: #f9fafb; border: 1px solid #e5e7eb; }
+        .btn-primary-custom { background-color: var(--primary); border: none; border-radius: 12px; padding: 12px 24px; color: white; width: 100%; font-weight: 600; }
+        
+        /* 笔记列样式 */
+        .note-cell { position: relative; padding-right: 30px; white-space: pre-line; cursor: pointer;}
+        .note-cell:hover { background-color: #f9fafb; border-radius: 8px; }
+        
+        /* 表格操作图标 */
+        .manage-btn { color: #9ca3af; cursor: pointer; transition: 0.2s; }
+        .manage-btn:hover { color: var(--primary); transform: scale(1.1); }
+    </style>
+</head>
+<body>
+
+<div class="container py-5" style="max-width: 1100px;">
+    
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-5">
+        <h2 class="fw-bold mb-0"><i class="fas fa-layer-group text-primary me-2"></i>Vocab Master</h2>
+        <a href="/export" class="btn btn-success rounded-pill px-3"><i class="fas fa-file-excel me-2"></i>Export</a>
+    </div>
+
+    <!-- Statistics -->
+    <div class="row g-4 mb-5">
+        <div class="col-6"><div class="stat-card"><div class="stat-num">{{ today_count }}</div><div>Today</div></div></div>
+        <div class="col-6"><div class="stat-card"><div class="stat-num">{{ total_count }}</div><div>Total</div></div></div>
+    </div>
+
+    <!-- Input Area -->
+    <div class="card-box">
+        <h5 class="fw-bold mb-4 text-muted small text-uppercase">Entry</h5>
+        <div class="mb-4">
+            <input type="text" id="inputWord" class="form-control form-control-lg" placeholder="Type a word..." autocomplete="off" style="font-size: 1.5rem;">
+        </div>
+
+        <!-- Existing Record Alert -->
+        <div id="existingPanel" style="display:none;" class="alert alert-warning border-0 shadow-sm">
+            <div class="d-flex align-items-center">
+                <span class="fw-bold">Found Record (Count: <span id="reviewCount"></span>)</span>
+            </div>
+            <div id="meaningsList" class="mt-2 bg-white p-2 rounded"></div>
+            <div class="mt-3">
+                <button onclick="justReview()" class="btn btn-outline-warning text-dark btn-sm w-100">Just Review (I know this)</button>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-3">
+                <select id="inputPos" class="form-select">
+                    <option value="n.">n. (Noun)</option>
+                    <option value="v.">v. (Verb)</option>
+                    <option value="vt.">vt. (Transitive)</option>
+                    <option value="vi.">vi. (Intransitive)</option>
+                    <option value="adj.">adj. (Adjective)</option>
+                    <option value="adv.">adv. (Adverb)</option>
+                    <option value="phrase">Phrase</option>
+                </select>
+            </div>
+            <div class="col-md-9">
+                <input type="text" id="inputDef" class="form-control" placeholder="Definition">
+            </div>
+            <div class="col-12">
+                <textarea id="inputNotes" class="form-control" placeholder="Notes (Shared for this word)" rows="2"></textarea>
+            </div>
+        </div>
+        <button onclick="saveWord()" class="btn-primary-custom mt-4">Save Record</button>
+    </div>
+
+    <!-- Word List Table -->
+    <div class="card-box">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th width="15%">Word</th>
+                        <th width="30%">Definitions</th>
+                        <th width="30%">Notes (Click to Edit)</th>
+                        <th width="10%" class="text-center">Count</th>
+                        <th width="15%" class="text-end">Time</th> <!-- 新增时间列 -->
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for w in recent_words %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <span class="fw-bold fs-5 me-2">{{ w.text }}</span>
+                                <!-- 管理按钮 -->
+                                <i class="fas fa-cog manage-btn" onclick="openManager({{ w.id }})" title="Manage Word"></i>
+                            </div>
+                        </td>
+                        <td class="small">{{ w.full_def | safe }}</td>
+                        
+                        <!-- 笔记列 (点击直接编辑) -->
+                        <td class="note-cell small text-muted" 
+                            data-id="{{ w.id }}" 
+                            data-note="{{ w.notes or '' }}"
+                            onclick="openNoteModalFromData(this)">
+                            {{ w.notes }}
+                            {% if not w.notes %}<span class="text-black-50 fst-italic">Add note...</span>{% endif %}
+                        </td>
+                        
+                        <td class="text-center"><span class="badge bg-light text-dark border rounded-pill px-3">{{ w.review_count }}</span></td>
+                        
+                        <!-- 时间列 (只显示日期和时间的前半部分) -->
+                        <td class="text-end text-muted small">
+                            {{ w.last_reviewed[:10] }}<br>
+                            {{ w.last_reviewed[11:16] }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 1. 笔记编辑模态框 -->
+<div class="modal fade" id="noteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Notes</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="noteEditId">
+                <textarea id="noteEditText" class="form-control" rows="5"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="saveNoteEdit()">Save Notes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. 单词管理模态框 (新功能：改单词、改释义) -->
+<div class="modal fade" id="managerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered"> <!-- 大号弹窗 -->
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold"><i class="fas fa-cog me-2"></i>Manage Word</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="managerWordId">
+                
+                <!-- 修改单词拼写 -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold text-muted small">WORD SPELLING</label>
+                    <div class="input-group">
+                        <input type="text" id="managerWordText" class="form-control fw-bold fs-5">
+                        <button class="btn btn-outline-primary" onclick="updateWordText()">Update Spelling</button>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- 修改释义列表 -->
+                <label class="form-label fw-bold text-muted small mb-3">DEFINITIONS</label>
+                <div id="managerDefList">
+                    <!-- JS 会在这里动态插入释义编辑行 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const inputWord = document.getElementById('inputWord');
+    const noteModal = new bootstrap.Modal(document.getElementById('noteModal'));
+    const managerModal = new bootstrap.Modal(document.getElementById('managerModal'));
+
+    inputWord.addEventListener('blur', checkWord);
+    inputWord.addEventListener('keypress', function (e) { if (e.key === 'Enter') checkWord(); });
+
+    // --- 1. 基础功能 ---
+    function checkWord() {
+        const word = inputWord.value.trim();
+        if (!word) return;
+
+        fetch('/api/check_word', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({word: word})
+        })
+        .then(res => res.json())
+        .then(data => {
+            const panel = document.getElementById('existingPanel');
+            const list = document.getElementById('meaningsList');
+            const noteInput = document.getElementById('inputNotes');
+            
+            if (data.exists) {
+                panel.style.display = 'block';
+                document.getElementById('reviewCount').innerText = data.review_count + 1;
+                noteInput.value = data.notes || ''; 
+                list.innerHTML = '';
+                data.meanings.forEach(m => {
+                    list.innerHTML += `<div class="small border-bottom py-1"><span class="fw-bold text-primary">${m.pos}</span> ${m.definition}</div>`;
+                });
+            } else {
+                panel.style.display = 'none';
+                noteInput.value = ''; 
+            }
+        });
+    }
+
+    function saveWord() {
+        const word = inputWord.value.trim();
+        if (!word) return;
+        fetch('/api/save_word', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                word: word, pos: document.getElementById('inputPos').value,
+                definition: document.getElementById('inputDef').value,
+                notes: document.getElementById('inputNotes').value
+            })
+        }).then(() => window.location.reload());
+    }
+
+    function justReview() {
+        fetch('/api/save_word', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ word: inputWord.value.trim(), force_review: true })
+        }).then(() => window.location.reload());
+    }
+
+    // --- 2. 笔记编辑 ---
+    function openNoteModalFromData(element) {
+        document.getElementById('noteEditId').value = element.getAttribute('data-id');
+        document.getElementById('noteEditText').value = element.getAttribute('data-note');
+        noteModal.show();
+    }
+
+    function saveNoteEdit() {
+        fetch('/api/update_word_notes', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: document.getElementById('noteEditId').value, notes: document.getElementById('noteEditText').value })
+        }).then(() => { noteModal.hide(); window.location.reload(); });
+    }
+
+    // --- 3. 管理/编辑单词与释义 (核心新功能) ---
+    function openManager(wordId) {
+        // 先清空旧数据
+        document.getElementById('managerDefList').innerHTML = '<div class="text-center my-3"><div class="spinner-border text-primary"></div></div>';
+        managerModal.show();
+
+        // 获取详情
+        fetch('/api/get_word_details', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: wordId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('managerWordId').value = data.id;
+            document.getElementById('managerWordText').value = data.text;
+            
+            const listDiv = document.getElementById('managerDefList');
+            listDiv.innerHTML = ''; // 清空Loading
+
+            if (data.meanings.length === 0) {
+                listDiv.innerHTML = '<p class="text-muted">No definitions found.</p>';
+            }
+
+            data.meanings.forEach(m => {
+                // 为每一条释义生成一个编辑行
+                const row = document.createElement('div');
+                row.className = 'row g-2 mb-3 align-items-center';
+                row.innerHTML = `
+                    <div class="col-3">
+                        <select class="form-select form-select-sm" id="pos-${m.id}">
+                            <option value="n." ${m.pos==='n.'?'selected':''}>n.</option>
+                            <option value="v." ${m.pos==='v.'?'selected':''}>v.</option>
+                            <option value="vt." ${m.pos==='vt.'?'selected':''}>vt.</option>
+                            <option value="vi." ${m.pos==='vi.'?'selected':''}>vi.</option>
+                            <option value="adj." ${m.pos==='adj.'?'selected':''}>adj.</option>
+                            <option value="adv." ${m.pos==='adv.'?'selected':''}>adv.</option>
+                            <option value="phrase" ${m.pos==='phrase'?'selected':''}>Phrase</option>
+                        </select>
+                    </div>
+                    <div class="col-7">
+                        <input type="text" class="form-control form-control-sm" id="def-${m.id}" value="${m.definition}">
+                    </div>
+                    <div class="col-2">
+                        <button class="btn btn-sm btn-outline-success w-100 mb-1" onclick="updateMeaning(${m.id})">Save</button>
+                        <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteMeaning(${m.id}, ${wordId})">Del</button>
+                    </div>
+                `;
+                listDiv.appendChild(row);
+            });
+        });
+    }
+
+    // 修改单词拼写
+    function updateWordText() {
+        const id = document.getElementById('managerWordId').value;
+        const text = document.getElementById('managerWordText').value;
+        fetch('/api/update_word_text', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: id, text: text })
+        }).then(res => res.json()).then(data => {
+            if(data.status === 'success') {
+                alert('Word updated!');
+                window.location.reload();
+            } else {
+                alert(data.msg);
+            }
+        });
+    }
+
+    // 修改某条释义
+    function updateMeaning(meaningId) {
+        const pos = document.getElementById(`pos-${meaningId}`).value;
+        const def = document.getElementById(`def-${meaningId}`).value;
+        fetch('/api/update_meaning', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: meaningId, pos: pos, definition: def })
+        }).then(() => {
+            // 成功后给个视觉反馈，不刷新
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = 'Done!';
+            btn.classList.replace('btn-outline-success', 'btn-success');
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.classList.replace('btn-success', 'btn-outline-success');
+            }, 1000);
+        });
+    }
+
+    // 删除释义 (配合管理弹窗使用)
+    function deleteMeaning(meaningId, wordId) {
+        if(!confirm('Delete this definition?')) return;
+        fetch('/api/delete_meaning', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: meaningId })
+        }).then(() => {
+            // 重新加载管理弹窗的内容
+            openManager(wordId);
+        });
+    }
+</script>
+
+</body>
+</html>
